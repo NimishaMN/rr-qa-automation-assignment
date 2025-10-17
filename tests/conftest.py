@@ -1,3 +1,4 @@
+import os
 import pytest
 from utils.driver_factory import create_edge_driver
 
@@ -7,13 +8,23 @@ def base_url():
 
 @pytest.fixture(scope="session")
 def driver():
-    # IMPORTANT: selenium-wire enabled so driver.requests exists
-    d = create_edge_driver(headless=False, use_selenium_wire=True)
+    headless = os.getenv("HEADLESS", "0") in ("1", "true", "True")
+    d = create_edge_driver(headless=headless, use_selenium_wire=True)
+    try:
+        d.set_page_load_timeout(60)
+    except Exception:
+        pass
     yield d
     d.quit()
 
 @pytest.fixture(autouse=True)
 def clear_requests(driver):
+    if hasattr(driver, "requests"):
+        try:
+            driver.requests.clear()
+        except Exception:
+            pass
+    yield
     if hasattr(driver, "requests"):
         try:
             driver.requests.clear()

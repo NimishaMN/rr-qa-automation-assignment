@@ -1,137 +1,140 @@
-# tests/test_discover_movie.py
-import time
-from selenium.webdriver.common.by import By
+from selenium.common.exceptions import ElementClickInterceptedException, TimeoutException
 from tests.utils_net import wait_for_call, API_KEY
+from selenium.webdriver.common.keys import Keys
+
+def _tab_xpath_ci(label: str) -> str:
+    L = "abcdefghijklmnopqrstuvwxyz"
+    U = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    return (
+        f"//*[self::a or self::button]"
+        f"[contains(translate(normalize-space(.), '{L}','{U}'), '{label.upper()}')]"
+    )
+
 
 def open_home(driver, base_url):
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
     driver.get(base_url)
     WebDriverWait(driver, 30).until(
         EC.any_of(
-            EC.presence_of_element_located((By.XPATH, "//button[contains(., 'Popular')]")),
-            EC.presence_of_element_located((By.XPATH, "//button[contains(., 'Newest')]")),
-            EC.presence_of_element_located((By.XPATH, "//button[contains(., 'Trending')]")),
+            EC.presence_of_element_located((By.XPATH, _tab_xpath_ci("Popular"))),
+            EC.presence_of_element_located((By.XPATH, _tab_xpath_ci("Newest"))),
+            EC.presence_of_element_located((By.XPATH, _tab_xpath_ci("Trend"))),
+            EC.presence_of_element_located((By.XPATH, _tab_xpath_ci("Top rated"))),
+            EC.presence_of_element_located((By.XPATH, "//input[@name='search']")),
         )
     )
     time.sleep(0.3)
 
+
 def click_category(driver, *labels, timeout=10):
-    # flexible clicker (same as before); short version for brevity:
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
     end = time.time() + timeout
     while time.time() < end:
         for label in labels:
-            xp = f"//button[contains(translate(., 'abcdefghijklmnopqrstuvwxyz','ABCDEFGHIJKLMNOPQRSTUVWXYZ'), '{label.upper()}')]"
-            els = driver.find_elements(By.XPATH, xp)
-            if els:
-                el = els[0]
-                try:
-                    WebDriverWait(driver, 5).until(EC.element_to_be_clickable(el))
-                except Exception:
-                    pass
-                try:
-                    el.click()
-                except Exception:
-                    driver.execute_script("arguments[0].click();", el)
-                time.sleep(0.5)
-                return
+            xp = _tab_xpath_ci(label)
+            els = [e for e in driver.find_elements(By.XPATH, xp) if e.is_displayed()]
+            if not els:
+                continue
+            el = els[0]
+            try:
+                WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.XPATH, xp)))
+            except TimeoutException:
+                pass
+            try:
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+                el.click()
+            except ElementClickInterceptedException:
+                driver.execute_script("arguments[0].click();", el)
+            time.sleep(0.5)
+            return
         time.sleep(0.25)
     raise AssertionError(f"Could not click any of: {labels}")
 
+def _find_search_input(driver, timeout=10):
+    L, U = "abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    xps = [
+        "//input[@name='search']",
+        f"//input[@type='text' and translate(@placeholder,'{L}','{U}')='SEARCH']",
+    ]
+    end = time.time() + timeout
+    while time.time() < end:
+        for xp in xps:
+            els = [e for e in driver.find_elements(By.XPATH, xp) if e.is_displayed()]
+            if els:
+                return els[0]
+        time.sleep(0.2)
+    raise AssertionError("Search input not found")
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import time
+
+def go_to_page(driver, n, timeout=10):
+    n = str(n)
+    xp = (
+        f"//a[@aria-label='Page {n}']"
+        f"|//a[normalize-space(.)='{n}' and (@role='button' or @tabindex)]"
+    )
+    link = WebDriverWait(driver, timeout).until(
+        EC.element_to_be_clickable((By.XPATH, xp))
+    )
+    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", link)
+    try:
+        link.click()
+    except Exception:
+        driver.execute_script("arguments[0].click();", link)
+
+    try:
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located(
+                (By.XPATH, f"//li[contains(@class,'selected')]//a[normalize-space(.)='{n}']|"
+                           f"//li[contains(@class,'selected')][normalize-space(.)='{n}']")
+            )
+        )
+    except Exception:
+        time.sleep(0.4)  # fallback settle
+
+
 def test_newest_calls_now_playing(driver, base_url):
-    """
-    Clicking 'Newest' triggers:
-      GET /3/movie/now_playing?page=1&api_key=...
-    """
     open_home(driver, base_url)
-    click_category(driver, "Newest", "Now Playing")  # UI label may vary
+    click_category(driver, "Newest")
 
     req = wait_for_call(
         driver,
         r"/3/movie/now_playing$",
         expected_params={"page": "1"},
-        timeout=60,
+        timeout=30,
     )
     assert req.response.status_code == 200
 
-def test_popular_calls_movie_popular(driver, base_url):
-    """
-    Clicking 'Popular' triggers:
-      GET /3/movie/popular?page=1&api_key=...
-    """
+
+def test_popular_calls_movie_page_2(driver, base_url):
     open_home(driver, base_url)
     click_category(driver, "Popular")
+    go_to_page(driver, 2)
 
     req = wait_for_call(
         driver,
         r"/3/movie/popular$",
-        expected_params={"page": "1"},
-        timeout=60,
+        expected_params={"page": "2"},
+        subset=True,
+        timeout=30,
     )
     assert req.response.status_code == 200
 
-def test_filtering_discovers_movie(driver, base_url):
-    """
-    Filtering triggers:
-      /3/discover/movie?sort_by=popularity.desc
-                         &release_date.gte=1903-01-01
-                         &release_date.lte=2025-12-31
-                         &vote_average.gte=0
-                         &vote_average.lte=5
-                         &page=1
-                         &with_genres=28
-                         &api_key=...
-    """
+def test_search_titles(driver, base_url):
     open_home(driver, base_url)
 
-    # --- Interact with UI to set filters (tweak selectors if your page differs) ---
-    # Example: click "Filters" if hidden, pick Genre=Action(28), Rating 0..5, Year range
-    try:
-        # Genre: assume a menu/searchable list — pick "Action"
-        # If you have a select/dropdown, adjust to your actual DOM
-        driver.find_element(By.XPATH, "//label[contains(., 'Genre')]/following::button[1]").click()
-        time.sleep(0.2)
-        driver.find_element(By.XPATH, "//li[contains(., 'Action')]").click()
-    except Exception:
-        pass
-
-    # Rating max 5
-    try:
-        # if there are two inputs for rating min/max, set max to 5 and min to 0
-        # update selectors to match your app's markup
-        max_rating = driver.find_element(By.CSS_SELECTOR, "[data-testid='rating-max'] input")
-        max_rating.clear(); max_rating.send_keys("5")
-        min_rating = driver.find_element(By.CSS_SELECTOR, "[data-testid='rating-min'] input")
-        min_rating.clear(); min_rating.send_keys("0")
-    except Exception:
-        pass
-
-    # Dates (release_date.gte / lte)
-    try:
-        start = driver.find_element(By.CSS_SELECTOR, "[data-testid='date-start'] input")
-        end   = driver.find_element(By.CSS_SELECTOR, "[data-testid='date-end'] input")
-        start.clear(); start.send_keys("1903-01-01")
-        end.clear();   end.send_keys("2025-12-31")
-    except Exception:
-        pass
-
-    time.sleep(2)  # allow filter change to trigger the network call
+    search_box = _find_search_input(driver)
+    search_box.clear()
+    search_box.click()
+    search_box.send_keys("war")
+    search_box.send_keys(Keys.ENTER)
 
     req = wait_for_call(
         driver,
-        r"/3/discover/movie$",
-        expected_params={
-            "sort_by": "popularity.desc",
-            "release_date.gte": "1903-01-01",
-            "release_date.lte": "2025-12-31",
-            "vote_average.gte": "0",
-            "vote_average.lte": "5",
-            "with_genres": "28",
-            "page": "1",
-        },
-        timeout=60,
-        subset=True,   # server may add extra params; we only assert the important ones + api_key
+        r"/3/search/(movie|tv)$",
+        expected_params={"query": "war", "page": "1"},
+        timeout=30,
+        subset=True,
     )
     assert req.response.status_code == 200

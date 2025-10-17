@@ -4,31 +4,30 @@ Feature: Network assertions
   Background:
     Given I am on the Discover home page
 
-  Scenario: Discover request includes filters
-    When I set rating to 8
-    Then I should observe a discover or search network call with rating "8"
+  Scenario: Popular movies page 1 loads via API
+    When I click the "Popular" tab
+    Then an API call is made to "movie popular" page 1
 
-  Scenario: Popular movies page 2 loads via API
-    When I click the "Popular" tab for Movies and go to page 2
-    Then an API call is made to "movie popular" page 2
+  Scenario: Trending (movie, week) loads via API
+    When I click the "Trend" tab
+    Then an API call is made to "trending movie week" page 1
 
-  Scenario: Trending TV this week
-    When I select "Trending" and "TV Shows" with window "week"
-    Then an API call is made to "trending tv week" page 1
+  Scenario: Newest loads now playing (movies)
+    When I click the "Newest" tab
+    Then an API call is made to "movie now playing" page 1
 
-  Scenario: Discover newest movies (sorted by release desc)
-    When I select "Newest" and page 1
-    Then an API call is made to "discover newest movies" page 1
+  Scenario: Top rated movies page 1 loads via API
+    When I click the "Top rated" tab
+    Then an API call is made to "movie top rated" page 1
 
-  Scenario: Discover movies with filters
-    When I set Genre to "Drama", Rating to "8", Year to "2000"
-    Then a "discover movie" API call occurs with params
-      | key                  | value |
-      | with_genres          | 18    |
-      | vote_average.gte     | 8     |
-      | primary_release_year | 2000  |
-      | page                 | 1     |
+  Scenario: Search movies for "war"
+    When I click the "SEARCH" tab and search for "war"
+    Then a "search movie" API call occurs with query "war" page 1
 
-  Scenario: Search TV titles for "office"
-    When I type "office" in the title search
-    Then a "search tv" API call occurs with query "office" page 1
+  Scenario: Discover options for TV, Genre=Comedy
+  When I set Type to "TV" and Genre to "Comedy"
+  Then a "discover tv" API call occurs with params
+    | key         | value |
+    | with_genres | 35    |
+    | page        | 1     |
+
