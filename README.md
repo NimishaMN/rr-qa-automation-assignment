@@ -80,3 +80,4 @@ pytest -v --html=report.html --self-contained-html
 | **Pagination stops working after a certain page** | Pagination beyond a few pages (for example, page > 5) becomes unresponsive or does not trigger an API call. | User cannot browse full results or verify deeper pages. | Known issue |
 | **Missing Discover options (Type / Genre)** | The Discover API does not expose selectable properties for “type” and “genre”. The filters still function using hardcoded UI values, but lack of dynamic properties prevents complete discoverability. | Partial filtering experience — missing metadata limits full API coverage. | Known issue |
 
+Adding few details for rebase trial.
