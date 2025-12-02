@@ -20,6 +20,7 @@ def open_home(driver, base_url):
             EC.presence_of_element_located((By.XPATH, _tab_xpath_ci("Trend"))),
             EC.presence_of_element_located((By.XPATH, _tab_xpath_ci("Top rated"))),
             EC.presence_of_element_located((By.XPATH, "//input[@name='search']")),
+            # adding change for rebase trial
         )
     )
     time.sleep(0.3)
